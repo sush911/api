@@ -1,15 +1,37 @@
 const mongoose = require('mongoose');
 
-const adoptionRequestSchema = new mongoose.Schema({
-  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  pet: { type: mongoose.Schema.Types.ObjectId, ref: 'Pet', required: true },
+const adoptionSchema = new mongoose.Schema({
+  petId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Pet',
+    required: true,
+  },
+
+  petName: String,
+  petType: {
+    type: String,
+    enum: ['Cat', 'Dog', 'Bird'],
+  },
+
+  fullName: String,
+  citizenshipNumber: String,
+  phoneNumber: String,
+  email: String,
+  homeAddress: String,
+  reason: String,
+  date: Date,
+
   status: {
     type: String,
     enum: ['pending', 'approved', 'rejected'],
-    default: 'pending'
+    default: 'pending',
   },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
+  adminMessage: String,
+
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
 });
 
-module.exports = mongoose.model('Adoption', adoptionRequestSchema);
+module.exports = mongoose.model('AdoptionRequest', adoptionSchema);

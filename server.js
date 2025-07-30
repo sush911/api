@@ -22,10 +22,12 @@ app.use('/uploads', express.static(uploadDir));
 const petRoutes = require('./routes/petRoutes');
 const userRoutes = require('./routes/userRoutes');
 const adoptionRoutes = require('./routes/adoptionRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 app.use('/api/pets', petRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/adoptions', adoptionRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // === MongoDB Connect ===
 mongoose

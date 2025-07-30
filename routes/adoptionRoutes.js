@@ -1,76 +1,83 @@
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth');
-const AdoptionRequest = require('../models/Adoption');
+const AdoptionRequest = require('../models/adoption');
+const Notification = require('../models/notification');
 const Pet = require('../models/Pet');
 
-// Create a new adoption request
-router.post('/:petId', auth, async (req, res) => {
+// 📥 Submit an adoption request
+router.post('/', async (req, res) => {
   try {
-    const petId = req.params.petId;
-    const existing = await AdoptionRequest.findOne({ user: req.userId, pet: petId });
-    if (existing) return res.status(400).json({ message: 'Request already exists' });
-
-    const request = new AdoptionRequest({ user: req.userId, pet: petId });
+    const request = new AdoptionRequest(req.body);
     await request.save();
-    res.status(201).json({ message: 'Adoption request sent', request });
+    res.status(201).json(request);
   } catch (err) {
-    console.error('Adoption error:', err);
-    res.status(500).json({ error: 'Failed to create adoption request' });
+    res.status(500).json({ error: 'Failed to submit request' });
   }
 });
 
-// Get all requests for the current user
-router.get('/user', auth, async (req, res) => {
-  try {
-    const requests = await AdoptionRequest.find({ user: req.userId })
-      .populate('pet')
-      .sort({ createdAt: -1 });
-    res.json(requests);
-  } catch (err) {
-    console.error('Fetch user requests error:', err);
-    res.status(500).json({ error: 'Failed to fetch user requests' });
-  }
-});
-
-// Admin: Get all adoption requests
-router.get('/', async (req, res) => {
+// 🛠️ Get all adoption requests (Admin)
+router.get('/admin', async (req, res) => {
   try {
     const requests = await AdoptionRequest.find()
-      .populate('user')
-      .populate('pet')
+      .populate('petId')
       .sort({ createdAt: -1 });
     res.json(requests);
   } catch (err) {
-    console.error('Fetch all requests error:', err);
     res.status(500).json({ error: 'Failed to fetch requests' });
   }
 });
 
-// Admin: update request status
-router.put('/:requestId/status', async (req, res) => {
+// 🔁 Update adoption status (Approve / Reject)
+router.put('/:id/status', async (req, res) => {
+  const { status, adminMessage } = req.body;
+
+  if (!['approved', 'rejected'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
+
   try {
-    const { status } = req.body;
-    const request = await AdoptionRequest.findById(req.params.requestId);
-    if (!request) return res.status(404).json({ message: 'Request not found' });
+    const request = await AdoptionRequest.findById(req.params.id).populate('petId');
+    if (!request) return res.status(404).json({ error: 'Request not found' });
 
     request.status = status;
-    request.updatedAt = new Date();
+    request.adminMessage = adminMessage || '';
     await request.save();
 
-    // Optionally mark pet as adopted
-    if (status === 'approved') {
-      const pet = await Pet.findById(request.pet);
-      if (pet) {
-        pet.adopted = true;
-        await pet.save();
-      }
-    }
+    // 🌍 Create global notification (no userId)
+    const notif = new Notification({
+      title: `Adoption Request ${status.toUpperCase()}`,
+      message:
+        status === 'approved'
+          ? `${request.petId?.name || 'A pet'} has been adopted.`
+          : `${request.petId?.name || 'A pet'}'s adoption was rejected.${adminMessage ? ` Reason: ${adminMessage}` : ''}`,
+      type: 'adoption',
+    });
 
-    res.json(request);
+    await notif.save();
+
+    res.json({ message: `Adoption ${status}`, request });
   } catch (err) {
-    console.error('Update request error:', err);
-    res.status(500).json({ error: 'Failed to update request' });
+    res.status(500).json({ error: 'Error updating request' });
+  }
+});
+
+// 📦 Get requests by pet
+router.get('/pet/:petId', async (req, res) => {
+  try {
+    const requests = await AdoptionRequest.find({ petId: req.params.petId });
+    res.json(requests);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch pet requests' });
+  }
+});
+
+// ❌ Delete a request
+router.delete('/:id', async (req, res) => {
+  try {
+    await AdoptionRequest.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Request deleted' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete request' });
   }
 });
 
