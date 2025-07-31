@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const Notification = require('../models/notification');
 
 // ✅ Admin creates notification (user-specific or global via null userId)
@@ -8,13 +9,21 @@ router.post('/', async (req, res) => {
     const { userId, title, message, type } = req.body;
 
     const notif = new Notification({
-      userId: userId || null, // optional user targeting
+      userId: userId || null,
       title,
       message,
       type: type || 'announcement',
     });
 
     await notif.save();
+
+    const io = req.app.get('io');
+    if (userId) {
+      io.to(userId).emit('new-notification', notif);
+    } else {
+      io.emit('new-notification', notif); // Broadcast to all
+    }
+
     res.status(201).json(notif);
   } catch (err) {
     res.status(500).json({ error: 'Failed to create notification' });
@@ -53,12 +62,20 @@ router.get('/', async (req, res) => {
   }
 });
 
-// ✅ Get personal + global notifications for a user
+// ✅ Get personal + global notifications for a user (fixed with ObjectId conversion)
 router.get('/user/:userId', async (req, res) => {
   try {
+    let userId = req.params.userId;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ error: 'Invalid userId format' });
+    }
+
+    userId = mongoose.Types.ObjectId(userId);
+
     const notifs = await Notification.find({
       $or: [
-        { userId: req.params.userId },
+        { userId: userId },
         { userId: null },
       ],
     })
@@ -74,7 +91,17 @@ router.get('/user/:userId', async (req, res) => {
 // ✅ Mark as read
 router.patch('/:id/read', async (req, res) => {
   try {
-    await Notification.findByIdAndUpdate(req.params.id, { isRead: true });
+    const updated = await Notification.findByIdAndUpdate(
+      req.params.id,
+      { isRead: true },
+      { new: true }
+    );
+
+    const io = req.app.get('io');
+    if (updated.userId) {
+      io.to(updated.userId.toString()).emit('notification-read', updated);
+    }
+
     res.json({ message: 'Notification marked as read' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to update notification' });
@@ -106,6 +133,3 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
-
-
-

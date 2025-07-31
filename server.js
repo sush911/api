@@ -45,5 +45,31 @@ app.use((err, req, res, next) => {
 });
 
 // === Start server ===
+// Replace your existing app.listen with this:
+const http = require('http').createServer(app);
+const { Server } = require('socket.io');
+const io = new Server(http, {
+  cors: {
+    origin: '*',
+  },
+});
+
+app.set('io', io); // Attach to app so you can use in routes
+
+io.on('connection', (socket) => {
+  console.log('🟢 A user connected');
+
+  socket.on('join', (userId) => {
+    console.log(`🔗 User joined: ${userId}`);
+    socket.join(userId); // Join room for private notifications
+  });
+
+  socket.on('disconnect', () => {
+    console.log('🔴 A user disconnected');
+  });
+});
+
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+http.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+
+
